@@ -53,17 +53,12 @@ public class KnowledgeSearchSkill implements AgentSkill {
     @Override
     public SkillResult execute(Map<String, Object> params) {
         try {
-            String query = (String) params.get("query");
+            String query = com.ragnarok.skill.SkillParamUtils.extractString(params, "query", "prompt", "search", "q", "text", "concept");
             if (query == null || query.isBlank()) {
                 return SkillResult.failure("Parameter 'query' is required.");
             }
 
-            int topK = 4;
-            if (params.containsKey("topK")) {
-                try {
-                    topK = Integer.parseInt(params.get("topK").toString());
-                } catch (Exception ignored) {}
-            }
+            int topK = com.ragnarok.skill.SkillParamUtils.extractInteger(params, 4, "topK", "top_k", "limit", "count");
 
             List<Document> docs = semanticMemoryService.similaritySearch(query, topK);
             if (docs.isEmpty()) {

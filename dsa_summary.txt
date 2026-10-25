@@ -1,6 +1,1 @@
-Dynamic Programming is an optimization technique that breaks down complex problems into overlapping subproblems and exhibits optimal substructure.
-Key classical algorithms include:
-1. The 0/1 Knapsack Problem with an optimal time complexity of O(n*W) using dynamic programming tables.
-2. The Longest Common Subsequence (LCS) algorithm running in O(m*n) time for DNA sequence alignment.
-3. The Bellman-Ford shortest paths algorithm capable of handling negative edge weight cycles.
-Memoization uses top-down recursive caching while Tabulation builds solutions bottom-up iteratively.
+key summary content

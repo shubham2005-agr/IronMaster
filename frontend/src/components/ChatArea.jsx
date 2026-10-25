@@ -13,7 +13,9 @@ import {
   Check, 
   StopCircle, 
   FileText,
-  Mail
+  Mail,
+  PanelLeftClose,
+  PanelLeftOpen
 } from 'lucide-react';
 import EmailDraftCard from './EmailDraftCard';
 import EmailModal from './EmailModal';
@@ -26,7 +28,9 @@ export default function ChatArea({
   streamingEnabled, 
   setStreamingEnabled,
   onClearChat,
-  sessionId
+  sessionId,
+  isSidebarCollapsed,
+  onToggleSidebar
 }) {
   const [input, setInput] = useState('');
   const [copiedIndex, setCopiedIndex] = useState(null);
@@ -88,19 +92,32 @@ export default function ChatArea({
     <main className="chat-container">
       {/* Top Bar inside Chat */}
       <div className="chat-header-bar">
-        <div className="stream-toggle-wrapper">
-          <label className="toggle-switch">
-            <input 
-              type="checkbox" 
-              checked={streamingEnabled} 
-              onChange={(e) => setStreamingEnabled(e.target.checked)} 
-            />
-            <span className="slider"></span>
-          </label>
-          <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-            <Radio size={14} color={streamingEnabled ? '#06b6d4' : '#64748b'} />
-            Real-Time SSE Streaming {streamingEnabled ? '(Active)' : '(Off)'}
-          </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {onToggleSidebar && (
+            <button
+              className="btn-toggle-sidebar"
+              onClick={onToggleSidebar}
+              title={isSidebarCollapsed ? "Show sessions sidebar" : "Hide sessions sidebar"}
+            >
+              {isSidebarCollapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
+              <span className="toggle-sidebar-label">{isSidebarCollapsed ? "Sessions" : "Hide"}</span>
+            </button>
+          )}
+
+          <div className="stream-toggle-wrapper">
+            <label className="toggle-switch">
+              <input 
+                type="checkbox" 
+                checked={streamingEnabled} 
+                onChange={(e) => setStreamingEnabled(e.target.checked)} 
+              />
+              <span className="slider"></span>
+            </label>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <Radio size={14} color={streamingEnabled ? '#06b6d4' : '#64748b'} />
+              Real-Time SSE Streaming {streamingEnabled ? '(Active)' : '(Off)'}
+            </span>
+          </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

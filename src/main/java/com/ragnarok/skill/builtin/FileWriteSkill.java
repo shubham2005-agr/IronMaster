@@ -59,14 +59,14 @@ public class FileWriteSkill implements AgentSkill {
     @Override
     public SkillResult execute(Map<String, Object> params) {
         try {
-            String filePath = (String) params.get("filePath");
-            String content = (String) params.get("content");
+            String filePath = com.ragnarok.skill.SkillParamUtils.extractString(params, "filePath", "path", "filename", "file", "targetPath", "name");
+            String content = com.ragnarok.skill.SkillParamUtils.extractString(params, "content", "text", "body", "data", "code", "payload");
 
             if (filePath == null || filePath.isBlank()) {
-                return SkillResult.failure("Parameter 'filePath' is required.");
+                return SkillResult.failure("Parameter 'filePath' (or 'path') is required.");
             }
             if (content == null) {
-                return SkillResult.failure("Parameter 'content' cannot be null.");
+                return SkillResult.failure("Parameter 'content' (or 'text') cannot be null.");
             }
 
             Path path = sandboxExecutor.validateAndResolvePath(filePath);

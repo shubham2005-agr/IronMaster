@@ -49,7 +49,9 @@ export default function Sidebar({
   onSelectSession, 
   onNewSession, 
   onSendSuggestedPrompt,
-  refreshTrigger 
+  refreshTrigger,
+  isCollapsed,
+  onToggleCollapse
 }) {
   const [activeTab, setActiveTab] = useState('chats'); // 'chats' | 'skills' | 'suggestions' | 'docs' | 'memory' | 'history' | 'email'
 
@@ -397,7 +399,7 @@ export default function Sidebar({
   };
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar ${isCollapsed ? 'collapsed' : ''}`}>
       {/* Tab Navigation */}
       <div className="sidebar-tabs" style={{ flexWrap: 'wrap' }}>
         <button

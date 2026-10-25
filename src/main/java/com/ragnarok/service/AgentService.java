@@ -20,18 +20,21 @@ public class AgentService {
     private final LongTermMemoryService longTermMemory;
     private final EpisodicMemoryService episodicMemory;
     private final EmailService emailService;
+    private final com.ragnarok.skill.SkillRegistry skillRegistry;
 
     public AgentService(
             ChatClient chatClient,
             ShortTermMemoryService shortTermMemory,
             LongTermMemoryService longTermMemory,
             EpisodicMemoryService episodicMemory,
-            EmailService emailService) {
+            EmailService emailService,
+            com.ragnarok.skill.SkillRegistry skillRegistry) {
         this.chatClient = chatClient;
         this.shortTermMemory = shortTermMemory;
         this.longTermMemory = longTermMemory;
         this.episodicMemory = episodicMemory;
         this.emailService = emailService;
+        this.skillRegistry = skillRegistry;
     }
 
     private String buildSystemPrompt(String sessionId, String prompt) {
@@ -104,6 +107,26 @@ public class AgentService {
                    "⚠️ **Human Confirmation Required**: Should I send this email now? Reply **'Yes / Send it'** or click the **Send Email** button to confirm."
                 3. NEVER claim you have sent an email without explicit human confirmation.
 
+                === 5. WORKSPACE SKILLS & TOOL EXECUTION ===
+                You have direct sovereign access to execute workspace skills inside E:\\SpringRag:
+                - `file_read`: Reads text or code files (parameters: {"filePath": "filename"})
+                - `file_write`: Writes or creates files (parameters: {"filePath": "filename", "content": "..."})
+                - `file_search`: Searches text/regex inside files (parameters: {"filePath": "filename", "pattern": "..."})
+                - `shell_command`: Runs approved PowerShell commands inside workspace (parameters: {"command": "..."})
+                - `knowledge_search`: Searches MariaDB vector memory (parameters: {"query": "..."})
+
+                If the user asks to inspect a file, check code, run a command, or search files:
+                Include a tool call in this exact format:
+                ```tool-call
+                {
+                  "skillId": "file_read",
+                  "parameters": {
+                    "filePath": "sample_notes.txt"
+                  }
+                }
+                ```
+                Followed by your brief plan. The system will execute the tool and provide the output.
+
                 === Operational & Formatting Rules ===
                 1. Structure answers with clear Markdown (`### Header`, bullet points, bold key terms).
                 2. Ground facts accurately in retrieved knowledge documents.
@@ -169,6 +192,40 @@ public class AgentService {
         } catch (Exception ignored) {}
     }
 
+    private String executeToolCallIfPresent(String content) {
+        if (content == null || !content.contains("```tool-call")) {
+            return null;
+        }
+        try {
+            int start = content.indexOf("```tool-call");
+            int end = content.indexOf("```", start + 12);
+            if (start != -1 && end != -1) {
+                String jsonStr = content.substring(start + 12, end).trim();
+                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                Map<String, Object> map = mapper.readValue(jsonStr, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
+                String skillId = map.get("skillId") != null ? map.get("skillId").toString() : null;
+                @SuppressWarnings("unchecked")
+                Map<String, Object> params = map.get("parameters") instanceof Map ? (Map<String, Object>) map.get("parameters") : java.util.Collections.emptyMap();
+                if (skillId != null) {
+                    Optional<com.ragnarok.skill.AgentSkill> skillOpt = skillRegistry.getSkill(skillId);
+                    if (skillOpt.isPresent()) {
+                        com.ragnarok.skill.SkillResult result = skillOpt.get().execute(params);
+                        if (result.isSuccess()) {
+                            return String.format("\n\n> 🛠️ **Executed Tool**: `%s`\n```text\n%s\n```\n", skillId, result.getOutput());
+                        } else {
+                            return String.format("\n\n> ❌ **Tool Execution Error** (`%s`): %s\n", skillId, result.getError());
+                        }
+                    } else {
+                        return String.format("\n\n> ❌ **Unknown Tool**: `%s`\n", skillId);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            return "\n\n> ⚠️ **Tool Execution Exception**: " + e.getMessage() + "\n";
+        }
+        return null;
+    }
+
     public String executeUserPrompt(String sessionId, String prompt) {
         // Check for conversational human-in-the-loop email confirmation
         String draftActionReply = handlePendingDraftAction(sessionId, prompt);
@@ -194,6 +251,10 @@ public class AgentService {
                 .content();
 
         extractAndStageEmailDraft(sessionId, aiResponse);
+        String toolExecution = executeToolCallIfPresent(aiResponse);
+        if (toolExecution != null) {
+            aiResponse = aiResponse + toolExecution;
+        }
 
         // Save AI Response to Short-Term Memory & Episodic Log
         shortTermMemory.saveMessage(sessionId, "ASSISTANT", aiResponse);
@@ -210,7 +271,7 @@ public class AgentService {
             shortTermMemory.saveMessage(sessionId, "ASSISTANT", draftActionReply);
             episodicMemory.logInteraction(sessionId, "USER", prompt, "SUCCESS", null);
             episodicMemory.logInteraction(sessionId, "ASSISTANT", draftActionReply, "SUCCESS", null);
-            return Flux.just(draftActionReply);
+            return Flux.just(draftActionReply, "[DONE]");
         }
 
         String systemInstruction = buildSystemPrompt(sessionId, prompt);
@@ -219,7 +280,7 @@ public class AgentService {
         shortTermMemory.saveMessage(sessionId, "USER", prompt);
         episodicMemory.logInteraction(sessionId, "USER", prompt, "SUCCESS", null);
 
-        // Stream from Ollama and persist completed response
+        // Stream from Ollama and execute any tool calls upon stream conclusion
         StringBuilder fullResponse = new StringBuilder();
         return chatClient.prompt()
                 .system(systemInstruction)
@@ -227,9 +288,18 @@ public class AgentService {
                 .stream()
                 .content()
                 .doOnNext(fullResponse::append)
+                .concatWith(Flux.defer(() -> {
+                    String toolExecution = executeToolCallIfPresent(fullResponse.toString());
+                    return toolExecution != null ? Flux.just(toolExecution) : Flux.empty();
+                }))
+                .concatWith(Flux.just("[DONE]"))
                 .doOnComplete(() -> {
                     String finalContent = fullResponse.toString();
                     extractAndStageEmailDraft(sessionId, finalContent);
+                    String toolExecution = executeToolCallIfPresent(finalContent);
+                    if (toolExecution != null && !finalContent.contains(toolExecution)) {
+                        finalContent = finalContent + toolExecution;
+                    }
                     shortTermMemory.saveMessage(sessionId, "ASSISTANT", finalContent);
                     episodicMemory.logInteraction(sessionId, "ASSISTANT", finalContent, "SUCCESS", null);
                 });

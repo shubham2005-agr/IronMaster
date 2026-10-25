@@ -104,7 +104,40 @@ public class SkillRegistry {
     }
 
     public Optional<AgentSkill> getSkill(String skillId) {
-        return Optional.ofNullable(registeredSkills.get(skillId));
+        if (skillId == null || skillId.isBlank()) {
+            return Optional.empty();
+        }
+
+        // 1. Direct match
+        if (registeredSkills.containsKey(skillId)) {
+            return Optional.of(registeredSkills.get(skillId));
+        }
+
+        // 2. Case-insensitive match
+        for (Map.Entry<String, AgentSkill> entry : registeredSkills.entrySet()) {
+            if (entry.getKey().equalsIgnoreCase(skillId)) {
+                return Optional.of(entry.getValue());
+            }
+        }
+
+        // 3. Canonical alias resolution for LLM mutations
+        String normalized = skillId.trim().toLowerCase().replaceAll("[-_\\s]", "");
+        String canonicalId = switch (normalized) {
+            case "fileread", "readfile", "viewfile", "cat" -> "file_read";
+            case "filewrite", "writefile", "createfile", "savefile" -> "file_write";
+            case "filesearch", "searchfile", "grep", "findtext" -> "file_search";
+            case "shellcommand", "shell", "cmd", "command", "powershell", "bash", "terminal", "exec" -> "shell_command";
+            case "knowledgesearch", "searchknowledge", "vectorsearch", "semanticsearch", "rag", "vectormemory" -> "knowledge_search";
+            case "httpwebhook", "webhook", "http", "curl", "apicall" -> "http_webhook";
+            case "emailsend", "sendemail", "email", "mail", "sendmail" -> "email_send";
+            default -> null;
+        };
+
+        if (canonicalId != null && registeredSkills.containsKey(canonicalId)) {
+            return Optional.of(registeredSkills.get(canonicalId));
+        }
+
+        return Optional.empty();
     }
 
     public Collection<AgentSkill> getAllSkills() {

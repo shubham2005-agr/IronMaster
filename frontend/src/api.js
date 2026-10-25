@@ -154,6 +154,35 @@ export function streamChatMessage(sessionId, message, { onChunk, onComplete, onE
   const url = `${API_BASE}/chat/stream?sessionId=${encodeURIComponent(sessionId)}&message=${encodeURIComponent(message)}${tokenParam}`;
   const controller = new AbortController();
 
+  let isCompleted = false;
+  let idleTimer = null;
+  let hasReceivedData = false;
+
+  const completeStream = () => {
+    if (isCompleted) return;
+    isCompleted = true;
+    if (idleTimer) {
+      clearTimeout(idleTimer);
+      idleTimer = null;
+    }
+    try {
+      controller.abort();
+    } catch (e) {
+      // Ignore abort errors
+    }
+    onComplete();
+  };
+
+  const resetIdleTimer = () => {
+    if (idleTimer) clearTimeout(idleTimer);
+    // If tokens were received and server goes completely silent for 2200ms, auto-complete
+    idleTimer = setTimeout(() => {
+      if (!isCompleted && hasReceivedData) {
+        completeStream();
+      }
+    }, 2200);
+  };
+
   fetch(url, {
     signal: controller.signal,
     headers: authHeaders({ 'Accept': 'text/event-stream' })
@@ -168,8 +197,9 @@ export function streamChatMessage(sessionId, message, { onChunk, onComplete, onE
       }
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
+
       const processEvent = (eventBlock) => {
-        if (!eventBlock) return;
+        if (!eventBlock || isCompleted) return;
         const lines = eventBlock.split(/\r?\n/);
         const dataLines = [];
         for (const line of lines) {
@@ -180,28 +210,60 @@ export function streamChatMessage(sessionId, message, { onChunk, onComplete, onE
           }
         }
         if (dataLines.length > 0) {
-          // Multiple data lines in a single SSE event are concatenated with newline
           const fullData = dataLines.join('\n');
-          if (fullData) {
-            if (fullData.startsWith('{') && fullData.endsWith('}')) {
-              try {
-                const parsed = JSON.parse(fullData);
-                onChunk(parsed.content ?? parsed.chunk ?? parsed.message ?? fullData);
-                return;
-              } catch (e) {
-                // Not JSON, continue to treat as raw text
-              }
-            }
-            onChunk(fullData);
+          if (!fullData) return;
+
+          // Check for [DONE] termination sentinel
+          if (fullData.trim() === '[DONE]') {
+            completeStream();
+            return;
           }
+
+          if (fullData.includes('[DONE]')) {
+            const [before] = fullData.split('[DONE]');
+            if (before) {
+              onChunk(before);
+            }
+            completeStream();
+            return;
+          }
+
+          hasReceivedData = true;
+          resetIdleTimer();
+
+          if (fullData.startsWith('{') && fullData.endsWith('}')) {
+            try {
+              const parsed = JSON.parse(fullData);
+              const textContent = parsed.content ?? parsed.chunk ?? parsed.message ?? fullData;
+              if (textContent === '[DONE]') {
+                completeStream();
+                return;
+              }
+              onChunk(textContent);
+              return;
+            } catch (e) {
+              // Not JSON, continue to treat as raw text
+            }
+          }
+          onChunk(fullData);
         }
       };
 
       let buffer = '';
 
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
+      while (!isCompleted) {
+        let readResult;
+        try {
+          readResult = await reader.read();
+        } catch (err) {
+          if (isCompleted || err.name === 'AbortError') {
+            break;
+          }
+          throw err;
+        }
+
+        const { value, done } = readResult;
+        if (done || isCompleted) break;
 
         buffer += decoder.decode(value, { stream: true });
         const events = buffer.split(/\r?\n\r?\n/);
@@ -209,22 +271,31 @@ export function streamChatMessage(sessionId, message, { onChunk, onComplete, onE
 
         for (const event of events) {
           processEvent(event);
+          if (isCompleted) break;
         }
       }
 
-      if (buffer) {
-        processEvent(buffer);
+      if (!isCompleted) {
+        if (buffer) {
+          processEvent(buffer);
+        }
+        completeStream();
       }
-
-      onComplete();
     })
     .catch((err) => {
-      if (err.name !== 'AbortError') {
+      if (idleTimer) clearTimeout(idleTimer);
+      if (err.name !== 'AbortError' && !isCompleted) {
         onError(err);
       }
     });
 
-  return () => controller.abort();
+  return () => {
+    if (idleTimer) clearTimeout(idleTimer);
+    isCompleted = true;
+    try {
+      controller.abort();
+    } catch (e) {}
+  };
 }
 
 export async function rememberMemory(sessionId, text, category = 'preference') {

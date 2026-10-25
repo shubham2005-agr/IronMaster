@@ -55,20 +55,14 @@ public class FileReadSkill implements AgentSkill {
     @Override
     public SkillResult execute(Map<String, Object> params) {
         try {
-            String filePath = (String) params.get("filePath");
+            String filePath = com.ragnarok.skill.SkillParamUtils.extractString(params, "filePath", "path", "filename", "file", "targetPath", "name");
             if (filePath == null || filePath.isBlank()) {
-                return SkillResult.failure("Parameter 'filePath' is required.");
+                return SkillResult.failure("Parameter 'filePath' (or 'path') is required.");
             }
 
-            Path path;
-            try {
-                path = sandboxExecutor.validateAndResolvePath(filePath);
-            } catch (Exception e) {
-                String fileName = Path.of(filePath).getFileName().toString();
-                path = sandboxExecutor.validateAndResolvePath(fileName);
-            }
+            Path path = sandboxExecutor.validateAndResolvePath(filePath);
             if (!Files.exists(path)) {
-                return SkillResult.failure("File does not exist: " + filePath);
+                return SkillResult.failure("File does not exist in workspace: " + filePath);
             }
 
             String content = Files.readString(path, StandardCharsets.UTF_8);

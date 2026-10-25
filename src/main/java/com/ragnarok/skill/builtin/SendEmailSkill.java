@@ -57,9 +57,12 @@ public class SendEmailSkill implements AgentSkill {
                 return SkillResult.failure("Parameters cannot be null.");
             }
 
-            String to = params.get("to") != null ? params.get("to").toString().trim() : null;
-            String subject = params.get("subject") != null ? params.get("subject").toString().trim() : "Notification from Ragnarok Agent";
-            String body = params.get("body") != null ? params.get("body").toString() : null;
+            String to = com.ragnarok.skill.SkillParamUtils.extractString(params, "to", "recipient", "email", "targetEmail", "dest");
+            String subject = com.ragnarok.skill.SkillParamUtils.extractString(params, "subject", "title", "topic");
+            if (subject == null || subject.isBlank()) {
+                subject = "Notification from Ragnarok Agent";
+            }
+            String body = com.ragnarok.skill.SkillParamUtils.extractString(params, "body", "content", "message", "text");
 
             if (to == null || to.isBlank()) {
                 return SkillResult.failure("Parameter 'to' (recipient email) is required.");

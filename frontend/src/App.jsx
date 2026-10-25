@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import Header from './components/Header';
+import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
 import ChatArea from './components/ChatArea';
+import WorkspaceView from './components/WorkspaceView';
 import AuthPage from './components/AuthPage';
 import {
   sendChatMessage,
@@ -11,16 +12,20 @@ import {
   clearSessionMessages,
   getUser,
   getCurrentUser,
-  logoutUser
+  logoutUser,
+  fetchSuggestions
 } from './api';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(() => getUser());
+  const [activeNav, setActiveNav] = useState('chat'); // 'chat' | 'workflows' | 'docs' | 'memory' | 'suggestions' | 'email'
   const [sessionId, setSessionId] = useState('user1');
   const [messages, setMessages] = useState([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [streamingEnabled, setStreamingEnabled] = useState(true);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [suggestionsCount, setSuggestionsCount] = useState(0);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   const abortStreamRef = useRef(null);
   const assistantContentRef = useRef('');
@@ -44,6 +49,19 @@ export default function App() {
       window.removeEventListener('ragnarok_auth_changed', handleAuthChange);
     };
   }, []);
+
+  // Fetch pending suggestions for the navbar badge
+  useEffect(() => {
+    if (currentUser) {
+      fetchSuggestions()
+        .then((sugs) => {
+          if (Array.isArray(sugs)) {
+            setSuggestionsCount(sugs.length);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [currentUser, refreshTrigger]);
 
   // Load existing session history on initial load or session switch
   useEffect(() => {
@@ -76,6 +94,9 @@ export default function App() {
       handleStopGeneration();
     }
     setSessionId(sid);
+    if (activeNav !== 'chat') {
+      setActiveNav('chat');
+    }
   };
 
   const handleNewSession = async () => {
@@ -91,6 +112,9 @@ export default function App() {
     setSessionId(newId);
     setMessages([]);
     setRefreshTrigger(prev => prev + 1);
+    if (activeNav !== 'chat') {
+      setActiveNav('chat');
+    }
   };
 
   const handleClearChat = async () => {
@@ -116,6 +140,11 @@ export default function App() {
 
   const handleSendMessage = async (text) => {
     if (!text.trim() || isGenerating) return;
+
+    // Switch back to chat view if triggered from a workspace prompt
+    if (activeNav !== 'chat') {
+      setActiveNav('chat');
+    }
 
     const userMessage = { role: 'USER', content: text, isStreaming: false };
     setMessages((prev) => [...prev, userMessage]);
@@ -220,34 +249,63 @@ export default function App() {
   }
 
   return (
-    <>
-      <Header
+    <div className="ragnarok-app-shell">
+      {/* Dynamic Animated Ambient Aurora Orbs */}
+      <div className="ambient-aurora-container" aria-hidden="true">
+        <div className="aurora-orb orb-1" />
+        <div className="aurora-orb orb-2" />
+        <div className="aurora-orb orb-3" />
+      </div>
+
+      {/* Modern Aesthetic Navigation Bar */}
+      <Navbar
+        activeNav={activeNav}
+        onSelectNav={(navId) => setActiveNav(navId)}
         sessionId={sessionId}
-        setSessionId={setSessionId}
         onNewSession={handleNewSession}
         currentUser={currentUser}
         onLogout={handleLogout}
+        suggestionsCount={suggestionsCount}
+        onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+        isSidebarCollapsed={isSidebarCollapsed}
       />
-      <div className="app-container">
-        <Sidebar
-          sessionId={sessionId}
-          onSelectSession={handleSelectSession}
-          onNewSession={handleNewSession}
-          onSendSuggestedPrompt={handleSendMessage}
-          refreshTrigger={refreshTrigger}
-          currentUser={currentUser}
-        />
-        <ChatArea
-          messages={messages}
-          onSendMessage={handleSendMessage}
-          isGenerating={isGenerating}
-          onStopGeneration={handleStopGeneration}
-          streamingEnabled={streamingEnabled}
-          setStreamingEnabled={setStreamingEnabled}
-          onClearChat={handleClearChat}
-          sessionId={sessionId}
-        />
+
+      {/* Main View Port: Either Chat Layout or Dedicated Workspace View */}
+      <div className="main-viewport-content">
+        {activeNav === 'chat' ? (
+          <div className={`app-container ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+            <Sidebar
+              sessionId={sessionId}
+              onSelectSession={handleSelectSession}
+              onNewSession={handleNewSession}
+              onSendSuggestedPrompt={handleSendMessage}
+              refreshTrigger={refreshTrigger}
+              currentUser={currentUser}
+              isCollapsed={isSidebarCollapsed}
+              onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+            />
+            <ChatArea
+              messages={messages}
+              onSendMessage={handleSendMessage}
+              isGenerating={isGenerating}
+              onStopGeneration={handleStopGeneration}
+              streamingEnabled={streamingEnabled}
+              setStreamingEnabled={setStreamingEnabled}
+              onClearChat={handleClearChat}
+              sessionId={sessionId}
+              isSidebarCollapsed={isSidebarCollapsed}
+              onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+            />
+          </div>
+        ) : (
+          <WorkspaceView
+            activeNav={activeNav}
+            sessionId={sessionId}
+            onNavigateToChat={() => setActiveNav('chat')}
+            onSendChatMessage={handleSendMessage}
+          />
+        )}
       </div>
-    </>
+    </div>
   );
 }

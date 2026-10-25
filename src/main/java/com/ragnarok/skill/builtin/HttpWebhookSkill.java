@@ -57,19 +57,27 @@ public class HttpWebhookSkill implements AgentSkill {
     @Override
     public SkillResult execute(Map<String, Object> params) {
         try {
-            String url = (String) params.get("url");
+            String url = com.ragnarok.skill.SkillParamUtils.extractString(params, "url", "uri", "endpoint", "targetUrl", "link");
             if (url == null || url.isBlank()) {
                 return SkillResult.failure("Parameter 'url' is required.");
             }
 
             // Graceful handling for LLM placeholder domains like example.com
             if (url.contains("example.com")) {
-                String payload = params.getOrDefault("body", "{}").toString();
+                String payload = com.ragnarok.skill.SkillParamUtils.extractString(params, "body", "payload", "data");
+                if (payload == null) payload = "{}";
                 return SkillResult.success("Webhook Simulated: Dispatched payload to " + url + " (" + payload.length() + " bytes)");
             }
 
-            String method = params.containsKey("method") ? params.get("method").toString().toUpperCase() : "GET";
-            String body = params.containsKey("body") ? params.get("body").toString() : "";
+            String method = com.ragnarok.skill.SkillParamUtils.extractString(params, "method", "httpMethod");
+            if (method == null || method.isBlank()) {
+                method = "GET";
+            } else {
+                method = method.toUpperCase();
+            }
+
+            String body = com.ragnarok.skill.SkillParamUtils.extractString(params, "body", "payload", "data");
+            if (body == null) body = "";
 
             HttpRequest.Builder reqBuilder = HttpRequest.newBuilder()
                     .uri(URI.create(url))

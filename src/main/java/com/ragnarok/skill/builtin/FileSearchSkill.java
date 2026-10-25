@@ -58,8 +58,8 @@ public class FileSearchSkill implements AgentSkill {
     @Override
     public SkillResult execute(Map<String, Object> params) {
         try {
-            String filePath = (String) params.get("filePath");
-            String patternStr = (String) params.get("pattern");
+            String filePath = com.ragnarok.skill.SkillParamUtils.extractString(params, "filePath", "path", "filename", "file", "targetPath", "name");
+            String patternStr = com.ragnarok.skill.SkillParamUtils.extractString(params, "pattern", "query", "keyword", "search", "regex", "q", "term");
 
             // If switching from shell_command, auto-extract filePath and pattern from command
             if ((filePath == null || filePath.isBlank()) && params.containsKey("command")) {
@@ -71,25 +71,24 @@ public class FileSearchSkill implements AgentSkill {
                 Matcher patternMatcher = Pattern.compile("-(?:Pattern|e|E)\\s+['\"]?([^'\"\\s]+)['\"]?").matcher(cmd);
                 if (patternMatcher.find()) {
                     patternStr = patternMatcher.group(1);
+                } else {
+                    Matcher grepMatcher = Pattern.compile("grep\\s+(?:-[a-zA-Z]+\\s+)?['\"]?([^'\"\\s]+)['\"]?").matcher(cmd);
+                    if (grepMatcher.find()) {
+                        patternStr = grepMatcher.group(1);
+                    }
                 }
             }
 
             if (filePath == null || filePath.isBlank()) {
-                return SkillResult.failure("Parameter 'filePath' is required.");
+                return SkillResult.failure("Parameter 'filePath' (or 'path') is required.");
             }
             if (patternStr == null || patternStr.isBlank()) {
                 patternStr = ".*";
             }
 
-            Path path;
-            try {
-                path = sandboxExecutor.validateAndResolvePath(filePath);
-            } catch (Exception e) {
-                String fileName = Path.of(filePath).getFileName().toString();
-                path = sandboxExecutor.validateAndResolvePath(fileName);
-            }
+            Path path = sandboxExecutor.validateAndResolvePath(filePath);
             if (!Files.exists(path)) {
-                return SkillResult.failure("File does not exist: " + filePath);
+                return SkillResult.failure("File does not exist in workspace: " + filePath);
             }
 
             List<String> allLines = Files.readAllLines(path, StandardCharsets.UTF_8);
@@ -111,7 +110,7 @@ public class FileSearchSkill implements AgentSkill {
             }
 
             if (matchingLines.isEmpty()) {
-                return SkillResult.success("No lines matched pattern: " + patternStr);
+                return SkillResult.success("No lines matched pattern: '" + patternStr + "' in " + filePath);
             }
 
             return SkillResult.success(String.join("\n", matchingLines));

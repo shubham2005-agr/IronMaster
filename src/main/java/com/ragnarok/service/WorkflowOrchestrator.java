@@ -211,11 +211,51 @@ public class WorkflowOrchestrator {
             parsed.remove("diagnosis");
             parsed.remove("explanation");
             parsed.remove("reason");
-            return parsed;
+            if (!parsed.isEmpty()) {
+                return parsed;
+            }
+            return autoHealParameters(step, errorMsg, failedParams);
         } catch (Exception e) {
-            log.warn("[WorkflowOrchestrator] Reflection parsing error: {}. Retrying with original.", e.getMessage());
-            return failedParams;
+            log.warn("[WorkflowOrchestrator] Reflection parsing error: {}. Triggering deterministic auto-heal.", e.getMessage());
+            return autoHealParameters(step, errorMsg, failedParams);
         }
+    }
+
+    private Map<String, Object> autoHealParameters(TaskStep step, String errorMsg, Map<String, Object> failedParams) {
+        Map<String, Object> healed = new HashMap<>(failedParams);
+        String err = errorMsg != null ? errorMsg.toLowerCase() : "";
+
+        // Auto-heal 1: grep error -> switch to file_search
+        if (err.contains("grep") && "shell_command".equalsIgnoreCase(step.getSkillId())) {
+            log.info("[WorkflowOrchestrator] Auto-healing: Converting failed 'grep' shell command to 'file_search'");
+            step.setSkillId("file_search");
+            String cmd = String.valueOf(failedParams.getOrDefault("command", ""));
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("([\\w-]+\\.[a-zA-Z0-9]+)").matcher(cmd);
+            if (m.find()) {
+                healed.put("filePath", m.group(1));
+            }
+            java.util.regex.Matcher pm = java.util.regex.Pattern.compile("grep\\s+(?:-[a-zA-Z]+\\s+)?['\"]?([^'\"\\s]+)['\"]?").matcher(cmd);
+            if (pm.find()) {
+                healed.put("pattern", pm.group(1));
+            }
+            return healed;
+        }
+
+        // Auto-heal 2: PowerShell ls -la flag error
+        if (err.contains("parameter cannot be found that matches parameter name 'la'") && healed.containsKey("command")) {
+            String cmd = healed.get("command").toString().replaceAll("-[a-zA-Z]*l[a-zA-Z]*", "").trim();
+            healed.put("command", cmd);
+            return healed;
+        }
+
+        // Auto-heal 3: Path leading slash on Windows
+        if (healed.containsKey("filePath")) {
+            String p = healed.get("filePath").toString().replaceFirst("^[\\\\/]+", "");
+            healed.put("filePath", p);
+            return healed;
+        }
+
+        return healed;
     }
 
     private Map<String, Object> resolveStepParameters(Map<String, Object> params, Map<String, TaskStep> completedSteps) {

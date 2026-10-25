@@ -51,9 +51,9 @@ public class ShellCommandSkill implements AgentSkill {
 
     @Override
     public SkillResult execute(Map<String, Object> params) {
-        String command = (String) params.get("command");
+        String command = com.ragnarok.skill.SkillParamUtils.extractString(params, "command", "cmd", "script", "shellCommand", "action");
         if (command == null || command.isBlank()) {
-            return SkillResult.failure("Parameter 'command' is required.");
+            return SkillResult.failure("Parameter 'command' (or 'cmd') is required.");
         }
         return sandboxExecutor.executeCommand(command);
     }
