@@ -1,0 +1,5 @@
+Project Ragnarok is an autonomous sovereign personal AI agent architecture.
+It combines local Ollama neural models with hybrid dual-database persistent memory.
+The primary operational store is MySQL running on port 3306 for conversational sliding buffers.
+The long-term semantic memory is powered by MariaDB Vector on port 3307 using 768-dimensional embeddings.
+All document processing and semantic chunking is executed through Spring AI pipelines with zero cloud dependency.

@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  mariadb-vector:
+    image: mariadb:11.4-rc
+    container_name: mariadb-vector
+    restart: always
+    environment:
+      MARIADB_ROOT_PASSWORD: root123
+      MARIADB_DATABASE: vectordb2
+    ports:
+      - "3307:3306"
+    volumes:
+      - mariadb_vector_data:/var/lib/mysql
+
+volumes:
+  mariadb_vector_data:
