@@ -72,6 +72,9 @@ public class ShortTermMemoryService {
         List<ChatMessageRecord> latestRecords = new ArrayList<>(
                 chatMessageRepository.findTop10BySessionIdOrderByTimestampDesc(sessionId)
         );
+        if (latestRecords.size() > 6) {
+            latestRecords = new ArrayList<>(latestRecords.subList(0, 6));
+        }
         Collections.reverse(latestRecords);
         return latestRecords;
     }

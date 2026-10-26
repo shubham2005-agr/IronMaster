@@ -29,6 +29,13 @@ public class WorkflowPlannerService {
         this.chatClient = chatClient;
         this.skillRegistry = skillRegistry;
         this.objectMapper = new ObjectMapper();
+        this.objectMapper.configure(com.fasterxml.jackson.core.json.JsonReadFeature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER.mappedFeature(), true);
+        this.objectMapper.configure(com.fasterxml.jackson.core.json.JsonReadFeature.ALLOW_UNESCAPED_CONTROL_CHARS.mappedFeature(), true);
+        this.objectMapper.configure(com.fasterxml.jackson.core.json.JsonReadFeature.ALLOW_JAVA_COMMENTS.mappedFeature(), true);
+        this.objectMapper.configure(com.fasterxml.jackson.core.json.JsonReadFeature.ALLOW_YAML_COMMENTS.mappedFeature(), true);
+        this.objectMapper.configure(com.fasterxml.jackson.core.json.JsonReadFeature.ALLOW_TRAILING_COMMA.mappedFeature(), true);
+        this.objectMapper.configure(com.fasterxml.jackson.core.json.JsonReadFeature.ALLOW_SINGLE_QUOTES.mappedFeature(), true);
+        this.objectMapper.configure(com.fasterxml.jackson.core.json.JsonReadFeature.ALLOW_UNQUOTED_FIELD_NAMES.mappedFeature(), true);
     }
 
     public ExecutionPlan createPlan(String goal) {
@@ -107,6 +114,19 @@ public class WorkflowPlannerService {
     private String extractJsonArray(String raw) {
         if (raw == null) return "[]";
         String clean = raw.trim();
+        if (clean.contains("```json")) {
+            int start = clean.indexOf("```json");
+            int end = clean.indexOf("```", start + 7);
+            if (start != -1 && end != -1) {
+                clean = clean.substring(start + 7, end).trim();
+            }
+        } else if (clean.contains("```")) {
+            int start = clean.indexOf("```");
+            int end = clean.indexOf("```", start + 3);
+            if (start != -1 && end != -1) {
+                clean = clean.substring(start + 3, end).trim();
+            }
+        }
         int start = clean.indexOf('[');
         int end = clean.lastIndexOf(']');
         if (start != -1 && end != -1 && end > start) {

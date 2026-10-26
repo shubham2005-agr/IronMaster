@@ -609,15 +609,18 @@ export default function WorkspaceView({
                     <span>Loading skill schemas...</span>
                   </div>
                 ) : (
-                  skills.map((sk) => (
-                    <div key={sk.id} className="skill-item-card">
-                      <div className="skill-title-row">
-                        <span className="skill-name">{sk.id}</span>
-                        <span className="skill-cat-tag">Sandboxed</span>
+                  skills.map((sk) => {
+                    const skId = sk.skillId || sk.id || sk.name;
+                    return (
+                      <div key={skId} className="skill-item-card">
+                        <div className="skill-title-row">
+                          <span className="skill-name">{sk.name || skId}</span>
+                          <span className="skill-cat-tag">{sk.type || 'Sandboxed'}</span>
+                        </div>
+                        <p className="skill-desc">{sk.description}</p>
                       </div>
-                      <p className="skill-desc">{sk.description}</p>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
 

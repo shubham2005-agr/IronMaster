@@ -41,9 +41,10 @@ public class ProactiveAgentService {
     }
 
     /**
-     * Periodic sweep every 30 minutes (1800000 ms).
+     * Periodic sweep runs every hour with an initial delay of 1 hour so local Ollama CPU is never blocked during active user sessions.
+     * Can always be triggered immediately on-demand via the UI 'Trigger Sweep' button.
      */
-    @Scheduled(fixedRate = 1800000, initialDelay = 60000)
+    @Scheduled(fixedRate = 3600000, initialDelay = 3600000)
     public void scheduledProactiveSweep() {
         log.info("[ProactiveAgent] Initiating scheduled proactive contextual sweep...");
         runProactiveSweep();

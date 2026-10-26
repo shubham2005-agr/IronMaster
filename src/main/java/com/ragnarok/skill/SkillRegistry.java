@@ -108,28 +108,41 @@ public class SkillRegistry {
             return Optional.empty();
         }
 
-        // 1. Direct match
-        if (registeredSkills.containsKey(skillId)) {
-            return Optional.of(registeredSkills.get(skillId));
+        String raw = skillId.trim();
+
+        // 1. Direct match on ID
+        if (registeredSkills.containsKey(raw)) {
+            return Optional.of(registeredSkills.get(raw));
         }
 
-        // 2. Case-insensitive match
+        // 2. Case-insensitive match on ID
         for (Map.Entry<String, AgentSkill> entry : registeredSkills.entrySet()) {
-            if (entry.getKey().equalsIgnoreCase(skillId)) {
+            if (entry.getKey().equalsIgnoreCase(raw)) {
                 return Optional.of(entry.getValue());
             }
         }
 
-        // 3. Canonical alias resolution for LLM mutations
-        String normalized = skillId.trim().toLowerCase().replaceAll("[-_\\s]", "");
+        // 2b. Match on Skill Name
+        for (AgentSkill skill : registeredSkills.values()) {
+            if (skill.getName() != null && skill.getName().equalsIgnoreCase(raw)) {
+                return Optional.of(skill);
+            }
+        }
+
+        // 3. Canonical alias resolution for LLM mutations & UI catalog calls
+        String normalized = raw.toLowerCase().replaceAll("[-_\\s]", "");
+        if (normalized.endsWith("skill") && normalized.length() > 5) {
+            normalized = normalized.substring(0, normalized.length() - 5);
+        }
+
         String canonicalId = switch (normalized) {
-            case "fileread", "readfile", "viewfile", "cat" -> "file_read";
-            case "filewrite", "writefile", "createfile", "savefile" -> "file_write";
-            case "filesearch", "searchfile", "grep", "findtext" -> "file_search";
-            case "shellcommand", "shell", "cmd", "command", "powershell", "bash", "terminal", "exec" -> "shell_command";
-            case "knowledgesearch", "searchknowledge", "vectorsearch", "semanticsearch", "rag", "vectormemory" -> "knowledge_search";
-            case "httpwebhook", "webhook", "http", "curl", "apicall" -> "http_webhook";
-            case "emailsend", "sendemail", "email", "mail", "sendmail" -> "email_send";
+            case "fileread", "readworkspacefile", "readfile", "viewfile", "cat" -> "file_read";
+            case "filewrite", "writeworkspacefile", "writefile", "createfile", "savefile" -> "file_write";
+            case "filesearch", "searchfilecontent", "searchfile", "grep", "findtext" -> "file_search";
+            case "shellcommand", "executesandboxedshellcommand", "shell", "cmd", "command", "powershell", "bash", "terminal", "exec" -> "shell_command";
+            case "knowledgesearch", "searchvectorknowledgestore", "searchknowledgedatabase", "searchknowledge", "vectorsearch", "semanticsearch", "rag", "vectormemory" -> "knowledge_search";
+            case "httpwebhook", "httpwebhookcaller", "webhook", "http", "curl", "apicall" -> "http_webhook";
+            case "emailsend", "sendemailsmtp", "sendemail", "email", "mail", "sendmail" -> "email_send";
             default -> null;
         };
 
@@ -147,12 +160,36 @@ public class SkillRegistry {
     public List<Map<String, Object>> getSkillDescriptionsForLlm() {
         List<Map<String, Object>> list = new ArrayList<>();
         for (AgentSkill skill : registeredSkills.values()) {
-            list.add(Map.of(
-                    "skillId", skill.getId(),
-                    "name", skill.getName(),
-                    "description", skill.getDescription(),
-                    "inputSchema", skill.getInputSchema()
-            ));
+            String type = switch (skill.getId()) {
+                case "file_read", "file_write" -> "IO";
+                case "file_search" -> "Search";
+                case "shell_command" -> "System";
+                case "knowledge_search" -> "RAG";
+                case "email_send" -> "Alert";
+                case "http_webhook" -> "Webhook";
+                default -> "Custom";
+            };
+
+            String sample = switch (skill.getId()) {
+                case "file_read" -> "{\"filePath\": \"pom.xml\"}";
+                case "file_write" -> "{\"filePath\": \"sandbox_test.txt\", \"content\": \"Hello from Ragnarok Skill Catalog!\"}";
+                case "file_search" -> "{\"filePath\": \"pom.xml\", \"pattern\": \"spring\"}";
+                case "shell_command" -> "{\"command\": \"cmd.exe /c echo Hello Ragnarok Sandbox\"}";
+                case "knowledge_search" -> "{\"query\": \"agent architecture\"}";
+                case "email_send" -> "{\"to\": \"admin@ragnarok.ai\", \"subject\": \"System Notice\", \"body\": \"Skill catalog alert notification\"}";
+                case "http_webhook" -> "{\"url\": \"http://localhost:8080/api/auth/me\", \"method\": \"GET\"}";
+                default -> "{}";
+            };
+
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("skillId", skill.getId());
+            map.put("name", skill.getName());
+            map.put("description", skill.getDescription());
+            map.put("type", type);
+            map.put("defaultParam", sample);
+            map.put("inputSchema", skill.getInputSchema());
+
+            list.add(map);
         }
         return list;
     }

@@ -37,101 +37,76 @@ public class AgentService {
         this.skillRegistry = skillRegistry;
     }
 
-    private String buildSystemPrompt(String sessionId, String prompt) {
-        // 1. Retrieve items from MariaDB Vector (top 4 chunks for efficiency)
-        List<Document> matchedDocs = longTermMemory.searchVectorStore(prompt, 4);
+    private boolean shouldSearchVectorStore(String prompt) {
+        if (prompt == null) return false;
+        String clean = prompt.trim().toLowerCase();
+        if (clean.length() < 10) return false;
+        // Skip slow embedding search for common chit-chat or simple greetings
+        return !clean.matches("^(hi|hello|hey|good\\s+(morning|afternoon|evening)|howdy|sup|who are you|what can you do|help|thanks|thank you|ok|okay|yes|no|clear|reset)[!.]*$");
+    }
 
+    private String buildSystemPrompt(String sessionId, String prompt) {
         List<String> knowledgeBlocks = new ArrayList<>();
         List<String> memoryFactBlocks = new ArrayList<>();
 
-        for (Document doc : matchedDocs) {
-            Map<String, Object> meta = doc.getMetadata();
-            String type = meta != null && meta.get("type") != null ? meta.get("type").toString() : "";
-            String source = meta != null && meta.get("source") != null ? meta.get("source").toString() : null;
-            String category = meta != null && meta.get("category") != null ? meta.get("category").toString() : "general";
+        // 1. Retrieve items from MariaDB Vector ONLY if prompt is informational
+        if (shouldSearchVectorStore(prompt)) {
+            try {
+                List<Document> matchedDocs = longTermMemory.searchVectorStore(prompt, 2);
+                for (Document doc : matchedDocs) {
+                    Map<String, Object> meta = doc.getMetadata();
+                    String type = meta != null && meta.get("type") != null ? meta.get("type").toString() : "";
+                    String source = meta != null && meta.get("source") != null ? meta.get("source").toString() : null;
+                    String category = meta != null && meta.get("category") != null ? meta.get("category").toString() : "general";
 
-            if ("knowledge_doc".equalsIgnoreCase(type) || "DOCUMENT".equalsIgnoreCase(type) || source != null) {
-                knowledgeBlocks.add(String.format("[Source: %s | Category: %s]\n%s", 
-                        source != null ? source : "Uploaded Document", category, doc.getText()));
-            } else {
-                memoryFactBlocks.add(String.format("[%s] %s", category, doc.getText()));
+                    if ("knowledge_doc".equalsIgnoreCase(type) || "DOCUMENT".equalsIgnoreCase(type) || source != null) {
+                        knowledgeBlocks.add(String.format("[Doc: %s | %s] %s", 
+                                source != null ? source : "Uploaded Document", category, doc.getText()));
+                    } else {
+                        memoryFactBlocks.add(String.format("[%s] %s", category, doc.getText()));
+                    }
+                }
+            } catch (Exception ignored) {
+                // Fail silently so vector search never blocks or delays chat stream
             }
         }
 
-        String knowledgeSection = knowledgeBlocks.isEmpty()
-                ? "No uploaded knowledge document snippets found for this query."
-                : String.join("\n\n---\n", knowledgeBlocks);
-
-        String longTermSection = memoryFactBlocks.isEmpty()
-                ? "No specific prior user facts found."
-                : String.join("\n- ", memoryFactBlocks);
-
-        // 2. Retrieve Short-Term Memory (MySQL Conversation Buffer)
+        // 2. Retrieve Short-Term Memory (recent 5 conversation turns for speed)
         List<ChatMessageRecord> history = shortTermMemory.getRecentContext(sessionId);
-        String chatHistorySection = history.isEmpty()
-                ? "No prior conversation messages in this session."
-                : history.stream()
+        String chatHistorySection = history.isEmpty() ? "" : history.stream()
+                .skip(Math.max(0, history.size() - 6))
                 .map(m -> m.getRole() + ": " + m.getContent())
                 .collect(Collectors.joining("\n"));
 
-        // 3. Assemble Unified System Prompt with Strict Formatting & Email Protocol
-        return """
-                You are Ragnarok, an intelligent, sovereign personal AI agent with hybrid dual persistent memory and autonomous action capabilities.
+        // 3. Assemble Ultra-Lean, High-Speed System Prompt (compact token size for fast CPU pre-fill)
+        StringBuilder sb = new StringBuilder();
+        sb.append("You are Ragnarok, a fast, sovereign AI agent with dual persistent memory and autonomous tools.\n");
 
-                === 1. RETRIEVED KNOWLEDGE DOCUMENTS (Uploaded by User) ===
-                %s
+        if (!knowledgeBlocks.isEmpty()) {
+            sb.append("\n=== KNOWLEDGE CONTEXT ===\n").append(String.join("\n", knowledgeBlocks)).append("\n");
+        }
+        if (!memoryFactBlocks.isEmpty()) {
+            sb.append("\n=== USER MEMORY ===\n- ").append(String.join("\n- ", memoryFactBlocks)).append("\n");
+        }
+        if (!chatHistorySection.isEmpty()) {
+            sb.append("\n=== RECENT CONVERSATION ===\n").append(chatHistorySection).append("\n");
+        }
 
-                === 2. LONG-TERM SEMANTIC MEMORY (User Profile & Facts) ===
-                %s
-
-                === 3. SHORT-TERM CONVERSATION HISTORY (MySQL Session Buffer) ===
-                %s
-
-                === 4. EMAIL DISPATCH & HUMAN-IN-THE-LOOP CONFIRMATION RULES (CRITICAL) ===
-                You are connected to an authentic Gmail SMTP Email Service (Sender: %s).
-                When the user requests to send an email or message:
-                1. IF RECIPIENT EMAIL IS MISSING:
-                   Politely ask the user: "Could you please provide the recipient's email address?"
-                   Do NOT make up a random email address.
-                2. IF RECIPIENT EMAIL IS KNOWN:
-                   Draft a professional subject and body based on the user's intent.
-                   ALWAYS include the draft in this exact fenced code block so our interactive UI card can render it:
-                   ```email-draft
-                   {
-                     "to": "recipient@example.com",
-                     "subject": "Clear Subject Title",
-                     "body": "Formatted email body text here"
-                   }
-                   ```
-                   Directly follow the block with:
-                   "⚠️ **Human Confirmation Required**: Should I send this email now? Reply **'Yes / Send it'** or click the **Send Email** button to confirm."
-                3. NEVER claim you have sent an email without explicit human confirmation.
-
-                === 5. WORKSPACE SKILLS & TOOL EXECUTION ===
-                You have direct sovereign access to execute workspace skills inside E:\\SpringRag:
-                - `file_read`: Reads text or code files (parameters: {"filePath": "filename"})
-                - `file_write`: Writes or creates files (parameters: {"filePath": "filename", "content": "..."})
-                - `file_search`: Searches text/regex inside files (parameters: {"filePath": "filename", "pattern": "..."})
-                - `shell_command`: Runs approved PowerShell commands inside workspace (parameters: {"command": "..."})
-                - `knowledge_search`: Searches MariaDB vector memory (parameters: {"query": "..."})
-
-                If the user asks to inspect a file, check code, run a command, or search files:
-                Include a tool call in this exact format:
-                ```tool-call
-                {
-                  "skillId": "file_read",
-                  "parameters": {
-                    "filePath": "sample_notes.txt"
-                  }
-                }
+        sb.append(String.format("""
+                === INSTRUCTIONS ===
+                - Be concise, direct, helpful, and fast. Format responses with clear Markdown.
+                - Active SMTP Sender: %s
+                - To draft an email, output exact block:
+                ```email-draft
+                {"to":"recipient@example.com","subject":"Subject","body":"Body"}
                 ```
-                Followed by your brief plan. The system will execute the tool and provide the output.
-
-                === Operational & Formatting Rules ===
-                1. Structure answers with clear Markdown (`### Header`, bullet points, bold key terms).
-                2. Ground facts accurately in retrieved knowledge documents.
-                3. Adhere to user preferences and maintain continuity.
-                """.formatted(knowledgeSection, longTermSection, chatHistorySection, emailService.getSenderEmail());
+                Followed by: "⚠️ **Confirmation Required**: Should I send this email now?"
+                - To execute workspace tools (file_read, file_write, file_search, shell_command, knowledge_search), output:
+                ```tool-call
+                {"skillId":"file_read","parameters":{"filePath":"..."}}
+                ```
+                """, emailService.getSenderEmail()));
+        return sb.toString();
     }
 
     private boolean isConfirmationIntent(String text) {
@@ -239,9 +214,8 @@ public class AgentService {
 
         String systemInstruction = buildSystemPrompt(sessionId, prompt);
 
-        // Save User Input to Short-Term Memory & Episodic Log
+        // Save User Input to Conversation Memory
         shortTermMemory.saveMessage(sessionId, "USER", prompt);
-        episodicMemory.logInteraction(sessionId, "USER", prompt, "SUCCESS", null);
 
         // Query Ollama
         String aiResponse = chatClient.prompt()
@@ -256,9 +230,8 @@ public class AgentService {
             aiResponse = aiResponse + toolExecution;
         }
 
-        // Save AI Response to Short-Term Memory & Episodic Log
+        // Save AI Response to Conversation Memory
         shortTermMemory.saveMessage(sessionId, "ASSISTANT", aiResponse);
-        episodicMemory.logInteraction(sessionId, "ASSISTANT", aiResponse, "SUCCESS", null);
 
         return aiResponse;
     }
@@ -269,16 +242,13 @@ public class AgentService {
         if (draftActionReply != null) {
             shortTermMemory.saveMessage(sessionId, "USER", prompt);
             shortTermMemory.saveMessage(sessionId, "ASSISTANT", draftActionReply);
-            episodicMemory.logInteraction(sessionId, "USER", prompt, "SUCCESS", null);
-            episodicMemory.logInteraction(sessionId, "ASSISTANT", draftActionReply, "SUCCESS", null);
             return Flux.just(draftActionReply, "[DONE]");
         }
 
         String systemInstruction = buildSystemPrompt(sessionId, prompt);
 
-        // Save User Input to Short-Term Memory & Episodic Log
+        // Save User Input to Conversation Memory
         shortTermMemory.saveMessage(sessionId, "USER", prompt);
-        episodicMemory.logInteraction(sessionId, "USER", prompt, "SUCCESS", null);
 
         // Stream from Ollama and execute any tool calls upon stream conclusion
         StringBuilder fullResponse = new StringBuilder();
@@ -301,7 +271,6 @@ public class AgentService {
                         finalContent = finalContent + toolExecution;
                     }
                     shortTermMemory.saveMessage(sessionId, "ASSISTANT", finalContent);
-                    episodicMemory.logInteraction(sessionId, "ASSISTANT", finalContent, "SUCCESS", null);
                 });
     }
 }

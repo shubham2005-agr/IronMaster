@@ -31,15 +31,71 @@ public class SkillController {
     }
 
     @PostMapping("/execute")
-    public ResponseEntity<SkillResult> executeSkill(@RequestBody Map<String, Object> request) {
-        String skillId = (String) request.get("skillId");
-        @SuppressWarnings("unchecked")
-        Map<String, Object> params = (Map<String, Object>) request.getOrDefault("parameters", Collections.emptyMap());
-
-        if (skillId == null || skillId.isBlank()) {
-            return ResponseEntity.badRequest().body(SkillResult.failure("Parameter 'skillId' is required."));
+    public ResponseEntity<SkillResult> executeSkill(@RequestBody(required = false) Map<String, Object> request) {
+        if (request == null || request.isEmpty()) {
+            return ResponseEntity.badRequest().body(SkillResult.failure("Request body is required."));
         }
 
+        String skillId = (String) request.get("skillId");
+        if (skillId == null || skillId.isBlank()) {
+            skillId = (String) request.get("name");
+        }
+        if (skillId == null || skillId.isBlank()) {
+            skillId = (String) request.get("id");
+        }
+        if (skillId == null || skillId.isBlank()) {
+            skillId = (String) request.get("skill");
+        }
+
+        if (skillId == null || skillId.isBlank()) {
+            return ResponseEntity.badRequest().body(SkillResult.failure("Parameter 'skillId' or 'name' is required."));
+        }
+
+        Map<String, Object> params = Collections.emptyMap();
+        Object rawParams = request.get("parameters");
+        if (rawParams instanceof Map<?, ?> m) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> casted = (Map<String, Object>) m;
+            params = casted;
+        } else if (rawParams instanceof String s && !s.isBlank()) {
+            try {
+                params = new com.fasterxml.jackson.databind.ObjectMapper().readValue(s, new com.fasterxml.jackson.core.type.TypeReference<>() {});
+            } catch (Exception ignored) {}
+        } else {
+            // Check if parameters were provided flattened at root level
+            Map<String, Object> flattened = new HashMap<>(request);
+            flattened.remove("skillId");
+            flattened.remove("name");
+            flattened.remove("id");
+            flattened.remove("skill");
+            flattened.remove("parameters");
+            if (!flattened.isEmpty()) {
+                params = flattened;
+            }
+        }
+
+        return executeSkillInternal(skillId, params);
+    }
+
+    @PostMapping("/{skillId}/execute")
+    public ResponseEntity<SkillResult> executeSkillByPath(
+            @PathVariable String skillId,
+            @RequestBody(required = false) Map<String, Object> request) {
+        Map<String, Object> params = Collections.emptyMap();
+        if (request != null) {
+            Object rawParams = request.get("parameters");
+            if (rawParams instanceof Map<?, ?> m) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> casted = (Map<String, Object>) m;
+                params = casted;
+            } else {
+                params = request;
+            }
+        }
+        return executeSkillInternal(skillId, params);
+    }
+
+    private ResponseEntity<SkillResult> executeSkillInternal(String skillId, Map<String, Object> params) {
         Optional<AgentSkill> skillOpt = skillRegistry.getSkill(skillId);
         if (skillOpt.isEmpty()) {
             return ResponseEntity.badRequest().body(SkillResult.failure("Skill not found: " + skillId));

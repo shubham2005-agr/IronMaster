@@ -49,9 +49,7 @@ export default function Sidebar({
   onSelectSession, 
   onNewSession, 
   onSendSuggestedPrompt,
-  refreshTrigger,
-  isCollapsed,
-  onToggleCollapse
+  refreshTrigger 
 }) {
   const [activeTab, setActiveTab] = useState('chats'); // 'chats' | 'skills' | 'suggestions' | 'docs' | 'memory' | 'history' | 'email'
 
@@ -399,7 +397,7 @@ export default function Sidebar({
   };
 
   return (
-    <aside className={`sidebar ${isCollapsed ? 'collapsed' : ''}`}>
+    <aside className="sidebar">
       {/* Tab Navigation */}
       <div className="sidebar-tabs" style={{ flexWrap: 'wrap' }}>
         <button
@@ -580,19 +578,19 @@ export default function Sidebar({
               <div style={{ background: 'rgba(6, 182, 212, 0.08)', border: '1px solid var(--accent-cyan)', borderRadius: '8px', padding: '12px', marginBottom: '16px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                   <span style={{ fontWeight: 700, fontSize: '0.82rem', color: '#fff' }}>Plan: {currentPlan.planId}</span>
-                  <span className={`workflow-step-badge ${currentPlan.overallStatus.toLowerCase()}`}>
-                    {currentPlan.overallStatus}
+                  <span className={`workflow-step-badge ${(currentPlan.overallStatus || currentPlan.status || 'PENDING').toLowerCase()}`}>
+                    {currentPlan.overallStatus || currentPlan.status || 'PENDING'}
                   </span>
                 </div>
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>
                   {currentPlan.summary}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  {currentPlan.steps.map((st, i) => (
+                  {(currentPlan.steps || []).map((st, i) => (
                     <div key={i} style={{ background: 'rgba(0,0,0,0.3)', padding: '6px 8px', borderRadius: '4px', fontSize: '0.75rem' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                         <span style={{ fontWeight: 600, color: 'var(--accent-cyan)' }}>{st.stepId} ({st.skillId})</span>
-                        <span className={`workflow-step-badge ${st.status.toLowerCase()}`}>{st.status}</span>
+                        <span className={`workflow-step-badge ${(st.status || 'PENDING').toLowerCase()}`}>{st.status}</span>
                       </div>
                       <div style={{ color: 'var(--text-muted)', marginTop: '2px' }}>{st.description}</div>
                       {st.output && (
@@ -609,7 +607,7 @@ export default function Sidebar({
                   ))}
                 </div>
 
-                {currentPlan.overallStatus === 'FAILED' && (
+                {(currentPlan.overallStatus === 'FAILED' || currentPlan.status === 'FAILED') && (
                   <button
                     className="btn-outline"
                     style={{ width: '100%', marginTop: '10px', fontSize: '0.75rem', borderColor: 'var(--accent-rose)', color: 'var(--accent-rose)' }}
@@ -639,17 +637,20 @@ export default function Sidebar({
                 REGISTERED AGENT SKILLS ({skills.length})
               </span>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
-                {skills.map((sk) => (
-                  <div key={sk.skillId} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-subtle)', borderRadius: '6px', padding: '8px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontWeight: 600, fontSize: '0.8rem', color: '#fff' }}>{sk.name}</span>
-                      <code style={{ fontSize: '0.68rem', color: 'var(--accent-indigo)' }}>{sk.skillId}</code>
+                {skills.map((sk) => {
+                  const sId = sk.skillId || sk.id || sk.name;
+                  return (
+                    <div key={sId} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-subtle)', borderRadius: '6px', padding: '8px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontWeight: 600, fontSize: '0.8rem', color: '#fff' }}>{sk.name || sId}</span>
+                        <code style={{ fontSize: '0.68rem', color: 'var(--accent-indigo)' }}>{sId}</code>
+                      </div>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '3px' }}>
+                        {sk.description}
+                      </div>
                     </div>
-                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '3px' }}>
-                      {sk.description}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>

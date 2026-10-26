@@ -1,80 +1,117 @@
 import React from 'react';
-import { Cpu, Database, HardDrive, RefreshCw, Layers, Sparkles, LogOut, Shield, User } from 'lucide-react';
+import { 
+  Command, 
+  LockKeyhole, 
+  RefreshCw, 
+  Layers, 
+  LogOut, 
+  Shield, 
+  User
+} from 'lucide-react';
 
-export default function Header({ sessionId, setSessionId, onNewSession, onResetSession, currentUser, onLogout }) {
+export default function Header({ 
+  sessionId, 
+  onNewSession, 
+  currentUser, 
+  onLogout, 
+  onReturnToLanding,
+  isBackendConnected = true
+}) {
   const isAdmin = currentUser?.role === 'ROLE_ADMIN';
-  const displayName = currentUser?.fullName || currentUser?.email?.split('@')[0] || 'User';
+  const displayName = currentUser?.fullName || currentUser?.email?.split('@')[0] || 'Alex Orlov';
 
   return (
-    <header className="header">
-      <div className="brand-section">
-        <div className="brand-icon">
-          <Sparkles size={22} />
-        </div>
-        <div className="brand-info">
-          <h1>
-            RAGNAROK <span className="brand-tag">v1.0 AI AGENT</span>
-          </h1>
-          <div className="brand-sub">Sovereign Dual-Memory Architecture (MySQL + MariaDB Vector)</div>
-        </div>
+    <div className="console-chrome">
+      <div className="chrome-left">
+        <span className="window-dots">
+          <i />
+          <i />
+          <i />
+        </span>
+        <span className="console-title">
+          <Command size={14} /> SOVEREIGN CONSOLE <small>v1.0 / local</small>
+        </span>
       </div>
 
-      <div className="system-status-pills">
-        <div className="status-pill" title="Spring Boot REST & SSE Server">
-          <div className="status-dot active"></div>
-          <span>API :8080</span>
-        </div>
-        <div className="status-pill" title="MySQL Short-Term Message History">
-          <div className="status-dot active"></div>
-          <HardDrive size={13} />
-          <span>MySQL :3306</span>
-        </div>
-        <div className="status-pill" title="MariaDB Native Vector Store">
-          <div className="status-dot cyan"></div>
-          <Database size={13} />
-          <span>Vector :3307</span>
-        </div>
-        <div className="status-pill" title="Local Ollama Inference Engine">
-          <div className="status-dot active"></div>
-          <Cpu size={13} />
-          <span>Llama 3.2</span>
-        </div>
+      <div className="console-status" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <span className={isBackendConnected ? "status-pulse" : "status-pulse offline"} />
+        <span>{isBackendConnected ? "LOCAL CORE ONLINE" : "DEMO / OFFLINE"}</span>
+        <span className="status-divider" />
+        <span className="system-telemetry-badge">API :8080</span>
+        <span className="system-telemetry-badge">MySQL :3306</span>
+        <span className="system-telemetry-badge">Vector :3307</span>
+        <span className="system-telemetry-badge">Ollama 3.2</span>
+        <span className="status-divider" />
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#8895a5' }}>
+          <LockKeyhole size={12} /> ENCRYPTED
+        </span>
       </div>
 
-      <div className="session-toolbar">
-        <div className="session-badge">
-          <Layers size={14} color="#6366f1" />
-          Session: <span>{sessionId}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        {/* Session Badge & New Session */}
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#14181f', padding: '4px 8px', borderRadius: '3px', border: '1px solid #272d36', fontSize: '9px', fontFamily: 'var(--font-mono)' }}>
+          <Layers size={12} style={{ color: 'var(--cyan)' }} />
+          <span style={{ color: '#818e9d' }}>Session:</span>
+          <strong style={{ color: '#dce3eb' }}>{sessionId}</strong>
         </div>
         <button
-          className="btn-outline"
+          type="button"
           onClick={onNewSession}
-          title="Switch to a new conversation session"
+          className="icon-button"
+          style={{ width: '26px', height: '24px' }}
+          title="Create New Chat Session"
         >
-          <RefreshCw size={13} />
-          New Session
+          <RefreshCw size={12} />
         </button>
 
+        <span className="status-divider" />
+
+        {/* Logout */}
+        {onLogout && (
+          <button
+            type="button"
+            onClick={onLogout}
+            className="quiet-link"
+            style={{ 
+              background: 'none', 
+              border: 'none', 
+              cursor: 'pointer', 
+              fontSize: '10px', 
+              color: '#97a3b1',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '5px',
+              padding: '4px 6px',
+              borderRadius: '3px',
+              transition: 'all 0.15s ease'
+            }}
+            title="Sign Out / Logout"
+          >
+            <LogOut size={12} />
+            <span>Logout</span>
+          </button>
+        )}
+
+        {/* User Pill */}
         {currentUser && (
-          <div className="user-profile-widget">
-            <div className={`user-role-badge ${isAdmin ? 'admin' : 'user'}`} title={`Role: ${currentUser.role}`}>
-              {isAdmin ? <Shield size={12} /> : <User size={12} />}
-              <span>{isAdmin ? 'ADMIN' : 'USER'}</span>
-            </div>
-            <div className="user-text-info" title={currentUser.email}>
-              <span className="user-display-name">{displayName}</span>
-            </div>
-            <button
-              className="btn-logout"
-              onClick={onLogout}
-              title="Logout of Ragnarok AI"
-            >
-              <LogOut size={14} />
-              <span>Logout</span>
-            </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: '4px' }}>
+            <span style={{ 
+              fontSize: '8px', 
+              fontFamily: 'var(--font-mono)', 
+              padding: '2px 5px', 
+              borderRadius: '2px', 
+              background: isAdmin ? 'var(--orange-dim)' : 'var(--cyan-dim)', 
+              color: isAdmin ? 'var(--orange)' : 'var(--cyan)',
+              border: `1px solid ${isAdmin ? 'rgba(255,112,69,0.3)' : 'rgba(140,241,229,0.3)'}`
+            }}>
+              {isAdmin ? 'ADMIN' : 'USER'}
+            </span>
+            <span className="chrome-user-name" style={{ fontSize: '11px', color: '#cfd7df', fontWeight: '500' }}>
+              {displayName}
+            </span>
           </div>
         )}
       </div>
-    </header>
+    </div>
   );
 }
